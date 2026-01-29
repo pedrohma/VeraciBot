@@ -13,8 +13,6 @@ namespace VeraciBot
 {
     class Program
     {
-        private ILogger<Program> _logger;
-
         static async Task Main(string[] args)
         {
             var loggerFactory = LoggerFactory.Create(builder =>
@@ -26,7 +24,7 @@ namespace VeraciBot
 
             // read configurations from appsettings.json or environment variables as needed
             var configuration = new ConfigurationBuilder()
-                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
 
             // map the configurations to AppSettings class
@@ -54,12 +52,12 @@ namespace VeraciBot
             // Cria a tarefa e espera ela
             Task tarefa1 = ThreadCicloTwitterChatGpt(appSettings, services);
 
-            Console.WriteLine("As tarefas foram iniciadas...");
+            logger.LogInformation("As tarefas foram iniciadas...");
 
             // Aguarda as duas tarefas terminarem
             await Task.WhenAll(tarefa1);
 
-            Console.WriteLine("Programa finalizado.");
+            logger.LogInformation("Programa finalizado.");
         }
 
         static async Task ThreadCicloTwitterChatGpt(
@@ -67,9 +65,10 @@ namespace VeraciBot
             ServiceCollection services
         )
         {
-            Console.WriteLine("TWIT: Connecting VERACIBOT database");
-
-            Console.WriteLine("TWIT: Starting VERACIBOT bot");
+            var logger = services
+                .BuildServiceProvider()
+                .GetRequiredService<ILogger<Program>>();
+            logger.LogInformation("Starting VERACIBOT Twitter bot");
 
             var dbConfig = services.BuildServiceProvider().GetRequiredService<DbConfig>();
             var dbContext = services.BuildServiceProvider().GetRequiredService<VeraciDbContext>();
@@ -83,7 +82,7 @@ namespace VeraciBot
                 .GetLastDateTimeForTwitterCheck()
                 .Result.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-            Console.WriteLine("TWIT: Checking mentions to @veracibot since " + startTime);
+           logger.LogInformation("TWIT: Checking mentions to @veracibot since " + startTime);
 
             while (true)
             {
@@ -95,12 +94,12 @@ namespace VeraciBot
 
                     if (mentions is null)
                     {
-                        Console.WriteLine("No mentions since " + startTime);
+                        logger.LogInformation("No mentions since " + startTime);
                         startTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
                     }
                     else
                     {
-                        Console.WriteLine("Treating mentions since " + startTime);
+                        logger.LogInformation("Treating mentions since " + startTime);
                         startTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
                         DateTime lastTime = DateTime.Parse(startTime);
@@ -111,21 +110,21 @@ namespace VeraciBot
 
                             if (tweet.Id == null)
                             {
-                                Console.WriteLine("Tweet id is null, skipping.");
+                                logger.LogInformation("Tweet id is null, skipping.");
                                 continue;
                             }
                             string tweetId = tweet.Id;
 
                             if (tweet.AuthorId == null)
                             {
-                                Console.WriteLine($"Tweet {tweetId} author_id is null, skipping.");
+                                logger.LogInformation($"Tweet {tweetId} author_id is null, skipping.");
                                 continue;
                             }
                             string authorId = tweet.AuthorId;
 
                             if (tweet.CreatedAt == null)
                             {
-                                Console.WriteLine($"Tweet {tweetId} created_at is null, skipping.");
+                                logger.LogInformation($"Tweet {tweetId} created_at is null, skipping.");
                                 continue;
                             }
                             string tweetDate = tweet.CreatedAt;
@@ -142,7 +141,7 @@ namespace VeraciBot
                             );
                             if (previousTweet != null)
                             {
-                                Console.WriteLine($"Tweet {tweetId} already processed.");
+                                logger.LogInformation($"Tweet {tweetId} already processed.");
                                 continue;
                             }
 
@@ -191,7 +190,7 @@ namespace VeraciBot
 
                             // Tenho que tratar esse tweet
 
-                            Console.WriteLine($"Getting full thread {tweetId}...");
+                            logger.LogInformation($"Getting full thread {tweetId}...");
 
                             // Pega todo o contexto da thread que o tweet faz parte
 
@@ -217,7 +216,7 @@ namespace VeraciBot
 
                                 // O que o usuário pediu?
 
-                                Console.WriteLine($"Getting command from {tweetId}...");
+                                logger.LogInformation($"Getting command from {tweetId}...");
 
                                 string commandstr = tweet.Text ?? "";
 
@@ -324,7 +323,7 @@ namespace VeraciBot
                                     )
                                 )
                                 {
-                                    Console.WriteLine(
+                                    logger.LogInformation(
                                         $"Tweet {tweetId} aceitação ou recusa já feita. Ignorado."
                                     );
                                     continue;
@@ -697,7 +696,7 @@ namespace VeraciBot
                                 );
                                 if (previousThread != null)
                                 {
-                                    Console.WriteLine($"Thread {tweetId} already processed.");
+                                    logger.LogInformation($"Thread {tweetId} already processed.");
                                     continue;
                                 }
 
@@ -745,7 +744,7 @@ namespace VeraciBot
                                         );
                                         if (result == null)
                                         {
-                                            Console.WriteLine(
+                                            logger.LogInformation(
                                                 $"Thread {fullThread.Id} failed to check."
                                             );
                                             continue;
@@ -798,7 +797,7 @@ namespace VeraciBot
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex.ToString());
+                    logger.LogInformation(ex.ToString());
                 }
 
                 Thread.Sleep(60000);
