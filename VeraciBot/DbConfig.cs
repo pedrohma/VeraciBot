@@ -1,64 +1,64 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json.Linq;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json.Linq;
 using VeraciBot.Data;
 
 namespace VeraciBot
 {
-
     public class DbConfig
     {
+        private readonly VeraciDbContext _dbContext;
 
-        public static async Task<DateTime> GetLastDateTimeForTwitterCheck(VeraciDbContext dbContext)
+        public DbConfig(VeraciDbContext dbContext)
         {
+            if (dbContext == null)
+                throw new ArgumentNullException(nameof(dbContext));
+            _dbContext = dbContext;
+        }
 
-            Config lastCheck = await dbContext.Configs.FirstOrDefaultAsync(e => e.Id == "TWIT_last_check");
-            if (lastCheck == null)
+        public async Task<DateTime> GetLastDateTimeForTwitterCheck()
+        {
+            Config lastCheck = await _dbContext.Configs.FirstOrDefaultAsync(e =>
+                e.Id == "TWIT_last_check"
+            );
+            if (lastCheck is null)
             {
                 lastCheck = new Config()
                 {
                     Id = "TWIT_last_check",
-                    Value = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    Value = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 };
-                dbContext.Configs.Add(lastCheck);
-                dbContext.SaveChanges();
+                _dbContext.Configs.Add(lastCheck);
+                _dbContext.SaveChanges();
             }
 
             return DateTime.Parse(lastCheck.Value);
-
         }
 
-        public static async Task SetLastDateTimeForTwitterCheck(VeraciDbContext dbContext, DateTime last)
+        public async Task SetLastDateTimeForTwitterCheck(DateTime last)
         {
-
-            Config lastCheck = await dbContext.Configs.FirstOrDefaultAsync(e => e.Id == "TWIT_last_check");
-            if (lastCheck == null)
+            Config lastCheck = await _dbContext.Configs.FirstOrDefaultAsync(e =>
+                e.Id == "TWIT_last_check"
+            );
+            if (lastCheck is null)
             {
-                
                 lastCheck = new Config()
                 {
                     Id = "TWIT_last_check",
-                    Value = last.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    Value = last.ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 };
-                dbContext.Configs.Add(lastCheck);
-                dbContext.SaveChanges();
-
+                _dbContext.Configs.Add(lastCheck);
+                _dbContext.SaveChanges();
+                return;
             }
-            else
-            {
 
-                lastCheck.Value = last.ToString("yyyy-MM-ddTHH:mm:ssZ");
-                dbContext.Configs.Update(lastCheck);
-                dbContext.SaveChanges();
-
-            }
-                            
+            lastCheck.Value = last.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            _dbContext.Configs.Update(lastCheck);
+            _dbContext.SaveChanges();
         }
-
     }
-
 }
