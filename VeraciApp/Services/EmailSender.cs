@@ -19,6 +19,8 @@ namespace VeraciApp.Services
         private readonly ILogger? _logger = null;
         private readonly SettingsBase _sendGridSettings;
 
+        public EmailSender() {}
+
         public EmailSender(SettingsBase sendGridSettings, ILogger<EmailSender>? logger = null)
         {
             _sendGridSettings = sendGridSettings;

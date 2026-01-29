@@ -5,12 +5,18 @@ using VeraciApp.Components;
 using VeraciApp.Components.Account;
 using VeraciBot.Data;
 using MudBlazor.Services;
-using VeraciBot;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using VeraciApp.Services;
+using VeraciLib.Settings;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// load settings from appsettings.json
+var appSettings = new AppSettings();
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .Build();
+configuration.GetSection("AppSettings").Bind(appSettings);               
 
 // Add MudBlazor services
 builder.Services.AddMudServices();
@@ -33,7 +39,7 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-builder.Services.AddDbContext<VeraciDbContext>(options => options.UseSqlServer(AppKeys.keys.dbConnection, b => b.MigrationsAssembly("VeraciApp")));
+builder.Services.AddDbContext<VeraciDbContext>(options => options.UseSqlServer(appSettings.DatabaseSettings.ConnectionString, b => b.MigrationsAssembly("VeraciApp")));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
@@ -47,8 +53,8 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender
 builder.Services.AddAuthentication()   
    .AddTwitter(twitterOptions =>
    {
-       twitterOptions.ConsumerKey = AppKeys.keys.xApiKey;
-       twitterOptions.ConsumerSecret = AppKeys.keys.xApiSecret;
+       twitterOptions.ConsumerKey = appSettings.xSettings.ApiKey;
+       twitterOptions.ConsumerSecret = appSettings.xSettings.ApiSecret;
        twitterOptions.RetrieveUserDetails = true;
    });
 

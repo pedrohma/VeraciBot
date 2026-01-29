@@ -48,19 +48,133 @@ public class TwitterServices : ITwitterActions
         return user?.Name;
     }
 
-    public Task<string> GetRepliedTweetText(string tweetId)
+    /// <summary>
+    /// Obtém o texto do tweet ao qual o tweet especificado respondeu
+    /// </summary>
+    /// <param name="tweetId"></param>
+    /// <returns></returns>
+    public async Task<string?> GetRepliedTweetText(string tweetId)
     {
-        throw new NotImplementedException();
+        string url = $"https://api.twitter.com/2/tweets/{tweetId}?tweet.fields=referenced_tweets";
+
+        var response = await _httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError($"Erro ao acessar a Twitter API: {response.StatusCode}");
+            return null;
+        }
+
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonResponse);
+        var root = doc.RootElement.GetProperty("data");
+
+        if (root.TryGetProperty("referenced_tweets", out JsonElement referencedTweets))
+        {
+            foreach (var refTweet in referencedTweets.EnumerateArray())
+            {
+                if (refTweet.GetProperty("type").GetString() == "replied_to")
+                {
+                    string repliedToId = refTweet.GetProperty("id").GetString();
+                    return await GetTweetTextById(repliedToId);
+                }
+            }
+        }
+
+        return null;
     }
 
-    public Task<TweetContext> GetTweetContext(string tweetId)
+    /// <summary>
+    /// Obtém o contexto de um tweet
+    /// </summary>
+    /// <param name="tweetId"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public async Task<TweetContext?> GetTweetContext(string tweetId)
     {
-        throw new NotImplementedException();
+        string url =
+            $"https://api.twitter.com/2/tweets/{tweetId}?tweet.fields=text,author_id,created_at,referenced_tweets&user.fields=username,name";
+
+        var response = await _httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError($"Erro ao acessar a Twitter API: {response.StatusCode}");
+            return null;
+        }
+
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonResponse);
+        var root = doc.RootElement.GetProperty("data");
+
+        string text = RemoveReferences(root.GetProperty("text").GetString());
+        string authorId = root.GetProperty("author_id").GetString();
+        string createdAt = root.GetProperty("created_at").GetString();
+        string authorName = "";
+        string authorUsername = "";
+        string repliedToId = "";
+
+        if (
+            root.TryGetProperty("includes", out JsonElement includes)
+            && includes.TryGetProperty("users", out JsonElement users)
+        )
+        {
+            foreach (var user in users.EnumerateArray())
+            {
+                if (user.GetProperty("id").GetString() == authorId)
+                {
+                    authorUsername = user.GetProperty("username").GetString();
+                    authorName = user.GetProperty("name").GetString();
+                    break;
+                }
+            }
+        }
+
+        if (root.TryGetProperty("referenced_tweets", out JsonElement referencedTweets))
+        {
+            foreach (var refTweet in referencedTweets.EnumerateArray())
+            {
+                if (refTweet.GetProperty("type").GetString() == "replied_to")
+                {
+                    repliedToId = refTweet.GetProperty("id").GetString();
+                    break;
+                }
+            }
+        }
+
+        // Aqui tenho todas as informações de um tweet
+
+        return new TweetContext
+        {
+            Id = tweetId,
+            Text = text,
+            AuthorId = authorId,
+            AuthorName = authorName,
+            AuthorUsername = authorUsername,
+            CreatedAt = createdAt,
+            RepliedToId = repliedToId,
+        };
     }
 
-    public Task<string> GetTweetTextById(string tweetId)
+    /// <summary>
+    /// Obtém o texto de um tweet pelo ID
+    /// </summary>
+    /// <param name="tweetId"></param>
+    /// <returns></returns>
+    public async Task<string?> GetTweetTextById(string tweetId)
     {
-        throw new NotImplementedException();
+        string url = $"https://api.twitter.com/2/tweets/{tweetId}?tweet.fields=text";
+
+        var response = await _httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError($"Erro ao buscar o tweet original: {response.StatusCode}");
+            return null;
+        }
+
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(jsonResponse);
+        var root = doc.RootElement.GetProperty("data");
+
+        return root.GetProperty("text").GetString();
     }
 
     /// <summary>
@@ -392,7 +506,7 @@ public class TwitterServices : ITwitterActions
     /// <param name="tweetId"></param>
     /// <param name="authorId"></param>
     /// <returns></returns>
-    public async Task<ThreadContext> GetThreadContext(string tweetId, string authorId)
+    public async Task<ThreadContext?> GetThreadContext(string tweetId, string authorId)
     {
         TweetContext tw = await GetTweetContext(tweetId);
         if (tw == null)
@@ -455,5 +569,24 @@ public class TwitterServices : ITwitterActions
         }
 
         return users.ToArray();
+    }
+
+    /// <summary>
+    /// Remove todas as referências de usuários (ex: @usuario) do texto fornecido
+    /// </summary>
+    /// <param name="text"></param>
+    /// <returns></returns>
+    private static string RemoveReferences(string text)
+    {
+        // Regex para encontrar @ seguido de letras, números e underscores
+        string standard = @"@\w+";
+
+        // Substitui todas as ocorrências por string vazia
+        string result = Regex.Replace(text, standard, "").Trim();
+
+        // Opcional: remover múltiplos espaços que sobraram
+        result = Regex.Replace(result, @"\s{2,}", " ");
+
+        return result.Trim();
     }
 }

@@ -1,22 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Http.Headers;
-using System.Reflection.Metadata;
-using System.Runtime.Intrinsics.X86;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Newtonsoft.Json.Linq;
 using VeraciBot.Data;
 using VeraciBotCore.APIs.OpenAI;
 using VeraciBotCore.APIs.Twitter;
 using VeraciLib.Interfaces;
 using VeraciLib.Services;
 using VeraciLib.Settings;
-using static System.Net.WebRequestMethods;
 
 namespace VeraciBot
 {
@@ -49,7 +40,9 @@ namespace VeraciBot
                 options.UseSqlServer(appSettings.DatabaseSettings.ConnectionString)
             );
             services.AddSingleton<ITwitterActions, TwitterServices>();
+            services.AddSingleton<IOpenAiActions, OpenAiServices>();
             services.AddTransient<DbConfig>();
+            services.AddTransient<Phrases>();
             var serviceProvider = services.BuildServiceProvider();
 
             logger.LogInformation("Initializing database context");
@@ -81,6 +74,10 @@ namespace VeraciBot
             var dbConfig = services.BuildServiceProvider().GetRequiredService<DbConfig>();
             var dbContext = services.BuildServiceProvider().GetRequiredService<VeraciDbContext>();
             var twitterApi = services.BuildServiceProvider().GetRequiredService<ITwitterActions>();
+            var openAiServices = services
+                .BuildServiceProvider()
+                .GetRequiredService<IOpenAiActions>();
+            var phrases = services.BuildServiceProvider().GetRequiredService<Phrases>();
 
             string startTime = dbConfig
                 .GetLastDateTimeForTwitterCheck()
@@ -181,7 +178,7 @@ namespace VeraciBot
                                 // TODO: Verificar a lingua do usuário e responder na língua correta
 
                                 string notAuthorizedResponseText =
-                                    await Phrases.GetNotAuthorizedResponseAsync("pt");
+                                    await phrases.GetNotAuthorizedResponseAsync("pt");
 
                                 await twitterApi.PostReplyWithImageAsync(
                                     notAuthorizedResponseText,
@@ -226,7 +223,7 @@ namespace VeraciBot
 
                                 // Chama o CHAT GPT para identificar o comando
 
-                                IdentifiedCommand cmd = await OpenAIAPI.CheckCommand(
+                                IdentifiedCommand cmd = await openAiServices.CheckCommand(
                                     commandstr,
                                     isSingleTweet
                                 );
@@ -235,17 +232,17 @@ namespace VeraciBot
 
                                 if (
                                     cmd == null
-                                    || cmd.Result == OpenAIAPI.CMD_UNKNOWN
+                                    || cmd.Result == OpenAiServices.CMD_UNKNOWN
                                     || (
-                                        cmd.Result != OpenAIAPI.CMD_HELP
-                                        && cmd.Result != OpenAIAPI.CMD_SCORE
-                                        && cmd.Result != OpenAIAPI.CMD_SCOREBOARD
-                                        && cmd.Result != OpenAIAPI.CMD_INVITE
-                                        && cmd.Result != OpenAIAPI.CMD_ACCEPT_INVITE
-                                        && cmd.Result != OpenAIAPI.CMD_REFUSE_INVITE
-                                        && cmd.Result != OpenAIAPI.CMD_THREAD_FALSE
-                                        && cmd.Result != OpenAIAPI.CMD_THREAD_ARGUE
-                                        && cmd.Result != OpenAIAPI.CMD_THREAD_WHOISRIGHT
+                                        cmd.Result != OpenAiServices.CMD_HELP
+                                        && cmd.Result != OpenAiServices.CMD_SCORE
+                                        && cmd.Result != OpenAiServices.CMD_SCOREBOARD
+                                        && cmd.Result != OpenAiServices.CMD_INVITE
+                                        && cmd.Result != OpenAiServices.CMD_ACCEPT_INVITE
+                                        && cmd.Result != OpenAiServices.CMD_REFUSE_INVITE
+                                        && cmd.Result != OpenAiServices.CMD_THREAD_FALSE
+                                        && cmd.Result != OpenAiServices.CMD_THREAD_ARGUE
+                                        && cmd.Result != OpenAiServices.CMD_THREAD_WHOISRIGHT
                                     )
                                 )
                                 {
@@ -266,7 +263,7 @@ namespace VeraciBot
                                     dbContext.SaveChanges();
 
                                     string failedToUndesrstadText =
-                                        await Phrases.GetFailedToUnderstandResponseAsync("pt");
+                                        await phrases.GetFailedToUnderstandResponseAsync("pt");
 
                                     await twitterApi.PostReplyWithImageAsync(
                                         failedToUndesrstadText,
@@ -282,8 +279,8 @@ namespace VeraciBot
                                 if (
                                     authorization != null
                                     && authorization.Status == AuthorizedUser.STATUS_INVITED
-                                    && cmd.Result != OpenAIAPI.CMD_ACCEPT_INVITE
-                                    && cmd.Result != OpenAIAPI.CMD_REFUSE_INVITE
+                                    && cmd.Result != OpenAiServices.CMD_ACCEPT_INVITE
+                                    && cmd.Result != OpenAiServices.CMD_REFUSE_INVITE
                                 )
                                 {
                                     // Não entendi o comando, precisa aceitar ou negar
@@ -303,7 +300,7 @@ namespace VeraciBot
                                     dbContext.SaveChanges();
 
                                     string failedToUndesrstadAcceptText =
-                                        await Phrases.GetFailedToUnderstandAcceptResponseAsync(
+                                        await phrases.GetFailedToUnderstandAcceptResponseAsync(
                                             "pt"
                                         );
 
@@ -322,8 +319,8 @@ namespace VeraciBot
                                     authorization != null
                                     && authorization.Status == AuthorizedUser.STATUS_AUTHORIZED
                                     && (
-                                        cmd.Result == OpenAIAPI.CMD_ACCEPT_INVITE
-                                        || cmd.Result == OpenAIAPI.CMD_REFUSE_INVITE
+                                        cmd.Result == OpenAiServices.CMD_ACCEPT_INVITE
+                                        || cmd.Result == OpenAiServices.CMD_REFUSE_INVITE
                                     )
                                 )
                                 {
@@ -337,7 +334,7 @@ namespace VeraciBot
 
                                 switch (cmd.Result)
                                 {
-                                    case OpenAIAPI.CMD_HELP: // Ajuda
+                                    case OpenAiServices.CMD_HELP: // Ajuda
 
                                         VeraciBot.Data.Tweet helpTweet = new Data.Tweet()
                                         {
@@ -354,7 +351,7 @@ namespace VeraciBot
                                         dbContext.SaveChanges();
 
                                         string helpResponseText =
-                                            await Phrases.GetHelpResponseAsync("pt");
+                                            await phrases.GetHelpResponseAsync("pt");
 
                                         await twitterApi.PostReplyWithImageAsync(
                                             helpResponseText,
@@ -363,7 +360,7 @@ namespace VeraciBot
                                         );
                                         break;
 
-                                    case OpenAIAPI.CMD_SCORE: // Pontuacao
+                                    case OpenAiServices.CMD_SCORE: // Pontuacao
 
                                         VeraciBot.Data.Tweet scoreTweet = new Data.Tweet()
                                         {
@@ -379,8 +376,9 @@ namespace VeraciBot
                                         dbContext.Tweets.Add(scoreTweet);
                                         dbContext.SaveChanges();
 
-                                        TwitterUser author =
-                                            await twitterApi.GetTwitterUserById(authorId);
+                                        TwitterUser author = await twitterApi.GetTwitterUserById(
+                                            authorId
+                                        );
                                         TweetAuthor authorTweet = await TweetAuthor.GetTweetAuthor(
                                             dbContext,
                                             authorId,
@@ -388,7 +386,7 @@ namespace VeraciBot
                                             author.Name
                                         );
 
-                                        string finalResponse = await Phrases.GetScoreResponseAsync(
+                                        string finalResponse = await phrases.GetScoreResponseAsync(
                                             "pt"
                                         );
                                         finalResponse += "\r\n\r\n" + authorTweet.GetDescription();
@@ -400,7 +398,7 @@ namespace VeraciBot
                                         );
                                         break;
 
-                                    case OpenAIAPI.CMD_SCOREBOARD: // Taebela de pontuação
+                                    case OpenAiServices.CMD_SCOREBOARD: // Taebela de pontuação
 
                                         VeraciBot.Data.Tweet scoreBoardTweet = new Data.Tweet()
                                         {
@@ -416,7 +414,7 @@ namespace VeraciBot
                                         dbContext.Tweets.Add(scoreBoardTweet);
                                         dbContext.SaveChanges();
 
-                                        string boardResponse = await Phrases.GetScoreResponseAsync(
+                                        string boardResponse = await phrases.GetScoreResponseAsync(
                                             "pt"
                                         );
                                         boardResponse +=
@@ -429,7 +427,7 @@ namespace VeraciBot
                                         );
                                         break;
 
-                                    case OpenAIAPI.CMD_INVITE: // Convidar outra pessoa
+                                    case OpenAiServices.CMD_INVITE: // Convidar outra pessoa
 
                                         VeraciBot.Data.Tweet InviteTweet = new Data.Tweet()
                                         {
@@ -445,7 +443,7 @@ namespace VeraciBot
                                         dbContext.Tweets.Add(InviteTweet);
                                         dbContext.SaveChanges();
 
-                                        string inviteText = await Phrases.GetInviteResponseAsync(
+                                        string inviteText = await phrases.GetInviteResponseAsync(
                                             "pt"
                                         );
 
@@ -517,7 +515,7 @@ namespace VeraciBot
                                                 dbContext.SaveChanges();
 
                                                 string inviteErrorText =
-                                                    await Phrases.GetInviteErrorResponseAsync("pt");
+                                                    await phrases.GetInviteErrorResponseAsync("pt");
 
                                                 await twitterApi.PostReplyWithImageAsync(
                                                     inviteErrorText,
@@ -595,7 +593,7 @@ namespace VeraciBot
                                             dbContext.SaveChanges();
 
                                             string inviteNoUserText =
-                                                await Phrases.GetInviteNoUserResponseAsync("pt");
+                                                await phrases.GetInviteNoUserResponseAsync("pt");
 
                                             await twitterApi.PostReplyWithImageAsync(
                                                 inviteNoUserText,
@@ -605,7 +603,7 @@ namespace VeraciBot
                                         }
                                         break;
 
-                                    case OpenAIAPI.CMD_ACCEPT_INVITE: // Aceitar convite
+                                    case OpenAiServices.CMD_ACCEPT_INVITE: // Aceitar convite
 
                                         VeraciBot.Data.Tweet AcceptInviteTweet = new Data.Tweet()
                                         {
@@ -633,7 +631,7 @@ namespace VeraciBot
 
                                         // Coloca resposta
 
-                                        string acceptText = await Phrases.GetAcceptResponseAsync(
+                                        string acceptText = await phrases.GetAcceptResponseAsync(
                                             "pt"
                                         );
 
@@ -645,7 +643,7 @@ namespace VeraciBot
 
                                         break;
 
-                                    case OpenAIAPI.CMD_REFUSE_INVITE: // Não Aceitar convite
+                                    case OpenAiServices.CMD_REFUSE_INVITE: // Não Aceitar convite
 
                                         VeraciBot.Data.Tweet RefuseInviteTweet = new Data.Tweet()
                                         {
@@ -674,7 +672,7 @@ namespace VeraciBot
 
                                         // Coloca resposta
 
-                                        string noAcceptText = await Phrases.GetRefuseResponseAsync(
+                                        string noAcceptText = await phrases.GetRefuseResponseAsync(
                                             "pt"
                                         );
 
@@ -705,10 +703,12 @@ namespace VeraciBot
 
                                 // Checa se tem crédito
 
-                                TwitterUser userAuthorA =
-                                    await twitterApi.GetTwitterUserById(fullThread.AuthorA);
-                                TwitterUser userAuthorB =
-                                    await twitterApi.GetTwitterUserById(fullThread.AuthorB);
+                                TwitterUser userAuthorA = await twitterApi.GetTwitterUserById(
+                                    fullThread.AuthorA
+                                );
+                                TwitterUser userAuthorB = await twitterApi.GetTwitterUserById(
+                                    fullThread.AuthorB
+                                );
 
                                 TweetAuthor authorA = await TweetAuthor.GetTweetAuthor(
                                     dbContext,
@@ -730,18 +730,19 @@ namespace VeraciBot
 
                                 switch (cmd.Result)
                                 {
-                                    case OpenAIAPI.CMD_THREAD_FALSE: // Contesta informação da thread
+                                    case OpenAiServices.CMD_THREAD_FALSE: // Contesta informação da thread
                                         break;
 
-                                    case OpenAIAPI.CMD_THREAD_WHOISRIGHT: // Quem está certo na thread
+                                    case OpenAiServices.CMD_THREAD_WHOISRIGHT: // Quem está certo na thread
                                         break;
 
-                                    case OpenAIAPI.CMD_THREAD_ARGUE: // Argumente sobre a thread
+                                    case OpenAiServices.CMD_THREAD_ARGUE: // Argumente sobre a thread
 
                                         // Chama o CHAT GPT
 
-                                        FullEvaluation result =
-                                            await OpenAIAPI.CheckThread(fullThread);
+                                        FullEvaluation result = await openAiServices.CheckThread(
+                                            fullThread
+                                        );
                                         if (result == null)
                                         {
                                             Console.WriteLine(

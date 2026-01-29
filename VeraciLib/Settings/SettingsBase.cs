@@ -4,5 +4,5 @@ namespace VeraciLib.Settings;
 
 public abstract class SettingsBase
 {
-    public string ApiKey { get; set; }
+    public string ApiKey { get; set; } = string.Empty;
 }
