@@ -3,11 +3,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using VeraciApp.Components;
 using VeraciApp.Components.Account;
-using VeraciBot.Data;
 using MudBlazor.Services;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using VeraciApp.Services;
 using VeraciLib.Settings;
+using VeraciBot.Entities.Users;
+using VeraciInfra.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 

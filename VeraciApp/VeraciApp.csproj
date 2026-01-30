@@ -26,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../VeraciInfra/VeraciInfra.csproj" />
     <ProjectReference Include="..\VeraciLib\VeraciLib.csproj" />
   </ItemGroup>
 

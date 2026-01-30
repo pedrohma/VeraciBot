@@ -20,11 +20,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="RestSharp" Version="112.1.0" />
-    <PackageReference Include="TweetinviAPI" Version="5.0.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../VeraciBotCore/VeraciBotCore.csproj" />
+    <ProjectReference Include="../VeraciInfra/VeraciInfra.csproj" />
     <ProjectReference Include="..\VeraciLib\VeraciLib.csproj" />
   </ItemGroup>
 

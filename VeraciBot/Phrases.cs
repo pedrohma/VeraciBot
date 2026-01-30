@@ -1,4 +1,4 @@
-﻿using VeraciLib.Interfaces;
+﻿using VeraciLib.Interfaces.API;
 
 namespace VeraciBot
 {

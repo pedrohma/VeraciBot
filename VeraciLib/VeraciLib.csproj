@@ -30,11 +30,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Interfaces/" />
-    <Folder Include="Services/" />
+    <Folder Include="Helper/" />
+    <Folder Include="Interfaces/Infra/Base/" />
+    <Folder Include="Models/OpenAiApi/" />
     <Folder Include="Settings/" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="../VeraciBotCore/VeraciBotCore.csproj" />
   </ItemGroup>
 </Project>

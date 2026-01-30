@@ -2,11 +2,16 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using VeraciBot.Data;
-using VeraciBotCore.APIs.OpenAI;
-using VeraciBotCore.APIs.Twitter;
-using VeraciLib.Interfaces;
-using VeraciLib.Services;
+using Tweetinvi.Core.Models;
+using VeraciBot.Entities;
+using VeraciInfra.Data;
+using VeraciInfra.Services.API;
+using VeraciInfra.Services.Data;
+using VeraciLib.Interfaces.API;
+using VeraciLib.Interfaces.Infra;
+using VeraciLib.Interfaces.Infra.Base;
+using VeraciLib.Models.OpenAiApi;
+using VeraciLib.Models.TwitterApi;
 using VeraciLib.Settings;
 
 namespace VeraciBot
@@ -37,9 +42,11 @@ namespace VeraciBot
             services.AddDbContext<VeraciDbContext>(options =>
                 options.UseSqlServer(appSettings.DatabaseSettings.ConnectionString)
             );
+            services.AddTransient(typeof(IRepository<>), typeof(RepositoryService<>));
             services.AddSingleton<ITwitterActions, TwitterServices>();
             services.AddSingleton<IOpenAiActions, OpenAiServices>();
-            services.AddTransient<DbConfig>();
+            services.AddSingleton<ITweetService, TweetService>();
+            services.AddSingleton<IConfigService, ConfigService>();
             services.AddTransient<Phrases>();
             var serviceProvider = services.BuildServiceProvider();
 
@@ -65,24 +72,23 @@ namespace VeraciBot
             ServiceCollection services
         )
         {
-            var logger = services
-                .BuildServiceProvider()
-                .GetRequiredService<ILogger<Program>>();
+            var logger = services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
             logger.LogInformation("Starting VERACIBOT Twitter bot");
 
-            var dbConfig = services.BuildServiceProvider().GetRequiredService<DbConfig>();
+            var configService = services.BuildServiceProvider().GetRequiredService<IConfigService>();
             var dbContext = services.BuildServiceProvider().GetRequiredService<VeraciDbContext>();
             var twitterApi = services.BuildServiceProvider().GetRequiredService<ITwitterActions>();
             var openAiServices = services
                 .BuildServiceProvider()
                 .GetRequiredService<IOpenAiActions>();
+            var tweetService = services.BuildServiceProvider().GetRequiredService<ITweetService>();
             var phrases = services.BuildServiceProvider().GetRequiredService<Phrases>();
 
-            string startTime = dbConfig
+            string startTime = configService
                 .GetLastDateTimeForTwitterCheck()
                 .Result.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-           logger.LogInformation("TWIT: Checking mentions to @veracibot since " + startTime);
+            logger.LogInformation("TWIT: Checking mentions to @veracibot since " + startTime);
 
             while (true)
             {
@@ -117,14 +123,18 @@ namespace VeraciBot
 
                             if (tweet.AuthorId == null)
                             {
-                                logger.LogInformation($"Tweet {tweetId} author_id is null, skipping.");
+                                logger.LogInformation(
+                                    $"Tweet {tweetId} author_id is null, skipping."
+                                );
                                 continue;
                             }
                             string authorId = tweet.AuthorId;
 
                             if (tweet.CreatedAt == null)
                             {
-                                logger.LogInformation($"Tweet {tweetId} created_at is null, skipping.");
+                                logger.LogInformation(
+                                    $"Tweet {tweetId} created_at is null, skipping."
+                                );
                                 continue;
                             }
                             string tweetDate = tweet.CreatedAt;
@@ -132,7 +142,7 @@ namespace VeraciBot
                             // Atualiza o último tweet processado
 
                             lastTime = DateTime.Parse(tweetDate);
-                            dbConfig.SetLastDateTimeForTwitterCheck(lastTime).Wait();
+                            configService.SetLastDateTimeForTwitterCheck(lastTime).Wait();
 
                             // Já tratei esse tweet? -> ignora
 
@@ -154,13 +164,13 @@ namespace VeraciBot
                                 authorization == null
                                 || (
                                     authorization != null
-                                    && authorization.Status == AuthorizedUser.STATUS_NOT_AUTHORIZED
+                                    && authorization.Status == AuthorizationStatus.NotAuthorized
                                 )
                             )
                             {
                                 // Não está autorizado
 
-                                VeraciBot.Data.Tweet notAuthTweet = new Data.Tweet()
+                                Entities.Tweet notAuthTweet = new Entities.Tweet()
                                 {
                                     Id = tweetId,
                                     OriginalText = "",
@@ -247,7 +257,7 @@ namespace VeraciBot
                                 {
                                     // Não entendi o comando
 
-                                    VeraciBot.Data.Tweet failToUnderstandTweet = new Data.Tweet()
+                                    Entities.Tweet failToUnderstandTweet = new Entities.Tweet()
                                     {
                                         Id = tweetId,
                                         OriginalText = "",
@@ -277,14 +287,14 @@ namespace VeraciBot
 
                                 if (
                                     authorization != null
-                                    && authorization.Status == AuthorizedUser.STATUS_INVITED
+                                    && authorization.Status == AuthorizationStatus.Invited
                                     && cmd.Result != OpenAiServices.CMD_ACCEPT_INVITE
                                     && cmd.Result != OpenAiServices.CMD_REFUSE_INVITE
                                 )
                                 {
                                     // Não entendi o comando, precisa aceitar ou negar
 
-                                    VeraciBot.Data.Tweet failToUnderstandTweet = new Data.Tweet()
+                                    Entities.Tweet failToUnderstandTweet = new Entities.Tweet()
                                     {
                                         Id = tweetId,
                                         OriginalText = "",
@@ -316,7 +326,7 @@ namespace VeraciBot
 
                                 if (
                                     authorization != null
-                                    && authorization.Status == AuthorizedUser.STATUS_AUTHORIZED
+                                    && authorization.Status == AuthorizationStatus.Authorized
                                     && (
                                         cmd.Result == OpenAiServices.CMD_ACCEPT_INVITE
                                         || cmd.Result == OpenAiServices.CMD_REFUSE_INVITE
@@ -335,7 +345,7 @@ namespace VeraciBot
                                 {
                                     case OpenAiServices.CMD_HELP: // Ajuda
 
-                                        VeraciBot.Data.Tweet helpTweet = new Data.Tweet()
+                                        Entities.Tweet helpTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             OriginalText = "",
@@ -361,7 +371,7 @@ namespace VeraciBot
 
                                     case OpenAiServices.CMD_SCORE: // Pontuacao
 
-                                        VeraciBot.Data.Tweet scoreTweet = new Data.Tweet()
+                                        Entities.Tweet scoreTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             OriginalText = "",
@@ -378,8 +388,7 @@ namespace VeraciBot
                                         TwitterUser author = await twitterApi.GetTwitterUserById(
                                             authorId
                                         );
-                                        TweetAuthor authorTweet = await TweetAuthor.GetTweetAuthor(
-                                            dbContext,
+                                        TweetAuthor authorTweet = await tweetService.GetTweetAuthor(
                                             authorId,
                                             author.Username,
                                             author.Name
@@ -399,7 +408,7 @@ namespace VeraciBot
 
                                     case OpenAiServices.CMD_SCOREBOARD: // Taebela de pontuação
 
-                                        VeraciBot.Data.Tweet scoreBoardTweet = new Data.Tweet()
+                                        Entities.Tweet scoreBoardTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             OriginalText = "",
@@ -417,7 +426,7 @@ namespace VeraciBot
                                             "pt"
                                         );
                                         boardResponse +=
-                                            "\r\n\r\n" + TweetAuthor.GetFullScoreBoard(10);
+                                            "\r\n\r\n" + tweetService.GetFullScoreBoard(10);
 
                                         await twitterApi.PostReplyWithImageAsync(
                                             boardResponse,
@@ -428,7 +437,7 @@ namespace VeraciBot
 
                                     case OpenAiServices.CMD_INVITE: // Convidar outra pessoa
 
-                                        VeraciBot.Data.Tweet InviteTweet = new Data.Tweet()
+                                        Entities.Tweet InviteTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             OriginalText = "",
@@ -490,16 +499,16 @@ namespace VeraciBot
                                                 inviteAuthorization != null
                                                 && (
                                                     inviteAuthorization.Status
-                                                        == AuthorizedUser.STATUS_AUTHORIZED
+                                                        == AuthorizationStatus.Authorized
                                                     || inviteAuthorization.Status
-                                                        == AuthorizedUser.STATUS_INVITED
+                                                        == AuthorizationStatus.Invited
                                                 )
                                             )
                                             {
                                                 // Já foi convidado ou já está jogando
 
-                                                VeraciBot.Data.Tweet inviteErrorTweet =
-                                                    new Data.Tweet()
+                                                Entities.Tweet inviteErrorTweet =
+                                                    new Entities.Tweet()
                                                     {
                                                         Id = tweetId,
                                                         OriginalText = "",
@@ -528,7 +537,7 @@ namespace VeraciBot
                                             if (
                                                 inviteAuthorization != null
                                                 && inviteAuthorization.Status
-                                                    == AuthorizedUser.STATUS_NOT_AUTHORIZED
+                                                    == AuthorizationStatus.NotAuthorized
                                             )
                                             {
                                                 // Se o cara não estava autorizado, pode ser convidado de novo... Atualiza autorização para convidado
@@ -538,7 +547,7 @@ namespace VeraciBot
                                                 inviteAuthorization.AuthorizationDate =
                                                     DateTime.UtcNow;
                                                 inviteAuthorization.Status =
-                                                    AuthorizedUser.STATUS_INVITED;
+                                                    AuthorizationStatus.Invited;
 
                                                 dbContext.AuthorizedUsers.Update(
                                                     inviteAuthorization
@@ -549,13 +558,13 @@ namespace VeraciBot
                                             {
                                                 // Cria autorização temporária para o usuário convidado
 
-                                                VeraciBot.Data.AuthorizedUser newTempAuth =
-                                                    new Data.AuthorizedUser()
+                                                Entities.AuthorizedUser newTempAuth =
+                                                    new Entities.AuthorizedUser()
                                                     {
                                                         Id = userInvite.Id,
                                                         AuthorizedById = fullThread.AuthorA,
                                                         AuthorizationDate = DateTime.UtcNow,
-                                                        Status = AuthorizedUser.STATUS_INVITED,
+                                                        Status = AuthorizationStatus.Invited,
                                                     };
 
                                                 dbContext.AuthorizedUsers.Add(newTempAuth);
@@ -576,17 +585,16 @@ namespace VeraciBot
                                         {
                                             // Não marcou outro usuário. Burro!
 
-                                            VeraciBot.Data.Tweet inviteNoUserTweet =
-                                                new Data.Tweet()
-                                                {
-                                                    Id = tweetId,
-                                                    OriginalText = "",
-                                                    ThreadId = fullThread.Id,
-                                                    Text = "",
-                                                    AuthorId = authorId,
-                                                    OriginalAuthorId = fullThread.AuthorA,
-                                                    Result = 0,
-                                                };
+                                            Entities.Tweet inviteNoUserTweet = new Entities.Tweet()
+                                            {
+                                                Id = tweetId,
+                                                OriginalText = "",
+                                                ThreadId = fullThread.Id,
+                                                Text = "",
+                                                AuthorId = authorId,
+                                                OriginalAuthorId = fullThread.AuthorA,
+                                                Result = 0,
+                                            };
 
                                             dbContext.Tweets.Add(inviteNoUserTweet);
                                             dbContext.SaveChanges();
@@ -604,7 +612,7 @@ namespace VeraciBot
 
                                     case OpenAiServices.CMD_ACCEPT_INVITE: // Aceitar convite
 
-                                        VeraciBot.Data.Tweet AcceptInviteTweet = new Data.Tweet()
+                                        Entities.Tweet AcceptInviteTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             OriginalText = "",
@@ -622,7 +630,7 @@ namespace VeraciBot
 
                                         if (authorization != null)
                                         {
-                                            authorization.Status = AuthorizedUser.STATUS_AUTHORIZED;
+                                            authorization.Status = AuthorizationStatus.Authorized;
 
                                             dbContext.AuthorizedUsers.Update(authorization);
                                             dbContext.SaveChanges();
@@ -644,7 +652,7 @@ namespace VeraciBot
 
                                     case OpenAiServices.CMD_REFUSE_INVITE: // Não Aceitar convite
 
-                                        VeraciBot.Data.Tweet RefuseInviteTweet = new Data.Tweet()
+                                        Entities.Tweet RefuseInviteTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             OriginalText = "",
@@ -663,7 +671,7 @@ namespace VeraciBot
                                         if (authorization != null)
                                         {
                                             authorization.Status =
-                                                AuthorizedUser.STATUS_NOT_AUTHORIZED;
+                                                AuthorizationStatus.NotAuthorized;
 
                                             dbContext.AuthorizedUsers.Update(authorization);
                                             dbContext.SaveChanges();
@@ -709,14 +717,12 @@ namespace VeraciBot
                                     fullThread.AuthorB
                                 );
 
-                                TweetAuthor authorA = await TweetAuthor.GetTweetAuthor(
-                                    dbContext,
+                                TweetAuthor authorA = await tweetService.GetTweetAuthor(
                                     fullThread.AuthorA,
                                     userAuthorA.Username,
                                     userAuthorA.Name
                                 );
-                                TweetAuthor authorB = await TweetAuthor.GetTweetAuthor(
-                                    dbContext,
+                                TweetAuthor authorB = await tweetService.GetTweetAuthor(
                                     fullThread.AuthorB,
                                     userAuthorB.Username,
                                     userAuthorB.Name
@@ -752,7 +758,7 @@ namespace VeraciBot
 
                                         // Prepara a resposta
 
-                                        VeraciBot.Data.Tweet fullResponseTweet = new Data.Tweet()
+                                        Entities.Tweet fullResponseTweet = new Entities.Tweet()
                                         {
                                             Id = tweetId,
                                             ThreadId = fullThread.Id,
@@ -764,8 +770,12 @@ namespace VeraciBot
                                             Result = result.Result,
                                         };
 
-                                        fullResponseTweet.ComputeAuthors(dbContext).Wait();
-
+                                        var compute = tweetService.ComputeAuthors(
+                                            fullResponseTweet.AuthorId,
+                                            fullResponseTweet.OriginalAuthorId,
+                                            fullResponseTweet.Result
+                                        );
+                                        compute.Wait();
                                         dbContext.Tweets.Add(fullResponseTweet);
                                         dbContext.SaveChanges();
 

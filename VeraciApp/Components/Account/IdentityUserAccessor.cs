@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Identity;
-using VeraciBot.Data;
+using VeraciBot.Entities.Users;
 
 namespace VeraciApp.Components.Account
 {
-    internal sealed class IdentityUserAccessor(UserManager<ApplicationUser> userManager, IdentityRedirectManager redirectManager)
+    internal sealed class IdentityUserAccessor(
+        UserManager<ApplicationUser> userManager,
+        IdentityRedirectManager redirectManager
+    )
     {
         public async Task<ApplicationUser> GetRequiredUserAsync(HttpContext context)
         {
@@ -11,7 +14,11 @@ namespace VeraciApp.Components.Account
 
             if (user is null)
             {
-                redirectManager.RedirectToWithStatus("Account/InvalidUser", $"Error: Unable to load user with ID '{userManager.GetUserId(context.User)}'.", context);
+                redirectManager.RedirectToWithStatus(
+                    "Account/InvalidUser",
+                    $"Error: Unable to load user with ID '{userManager.GetUserId(context.User)}'.",
+                    context
+                );
             }
 
             return user;
