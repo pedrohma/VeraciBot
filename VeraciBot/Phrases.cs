@@ -2,7 +2,7 @@
 
 namespace VeraciBot
 {
-    internal class Phrases
+    public class Phrases
     {
         private readonly IOpenAiActions _openAiServices;
 

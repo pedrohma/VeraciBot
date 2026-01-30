@@ -14,8 +14,8 @@ public class ConfigService : IConfigService
 
     public ConfigService(ILogger<ConfigService> logger, IRepository<Config> configRepository)
     {
-        ArgumentNullException.ThrowIfNull(_logger);
-        ArgumentNullException.ThrowIfNull(_configRepository);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(configRepository);
         _logger = logger;
         _configRepository = configRepository;
     }
